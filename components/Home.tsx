@@ -22,15 +22,6 @@ const Home: React.FC<HomeProps> = ({ user, settings, checklist, setChecklist, on
     const [showChecklistModal, setShowChecklistModal] = useState(false);
     const [newItemText, setNewItemText] = useState('');
     const [nextMeal, setNextMeal] = useState<{ meal: string; time: string; items: string[] } | null>(null);
-    const [idCardUrl, setIdCardUrl] = useState<string | null>(null);
-
-    // Load ID card from localStorage
-    useEffect(() => {
-        const localIdCard = localStorage.getItem('local_id_card');
-        if (localIdCard) {
-            setIdCardUrl(localIdCard);
-        }
-    }, [user]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -153,8 +144,8 @@ const Home: React.FC<HomeProps> = ({ user, settings, checklist, setChecklist, on
                 if (!settings.showIdOnHome) return null;
                 return (
                     <div key="ID_CARD" className="glass p-0 rounded-2xl relative overflow-hidden group aspect-[1.586/1] border border-white/10">
-                        {idCardUrl ? (
-                            <img src={idCardUrl} alt="ID Card" className="w-full h-full object-cover" />
+                        {user.photoUrl ? (
+                            <img src={user.photoUrl} alt="ID" className="w-full h-full object-cover" />
                         ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center bg-black/40">
                                 <span className="text-gray-500 text-xs">No ID Image Set</span>
