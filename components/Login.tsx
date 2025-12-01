@@ -103,24 +103,29 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         console.log('[PWA DEBUG] Auth successful! User ID:', authData.user.id);
         console.log('[PWA DEBUG] Now fetching profile...');
 
-        // Try to fetch profile with detailed logging
+        // Create a timeout promise
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Profile fetch timeout after 5s')), 5000)
+        );
+
+        // Fetch profile with timeout
+        const profileFetchPromise = supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authData.user.id)
+          .single();
+
         try {
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', authData.user.id)
-            .single();
+          const { data: profile, error: profileError } = await Promise.race([
+            profileFetchPromise,
+            timeoutPromise
+          ]) as any;
 
           console.log('[PWA DEBUG] Profile fetch result:', {
             hasProfile: !!profile,
             error: profileError?.message,
             errorDetails: profileError
           });
-
-          if (profileError) {
-            console.error('[PWA DEBUG] Profile fetch error:', profileError);
-            // Don't fail login - continue with auth data
-          }
 
           // Construct user object
           const user: UserProfile = {
@@ -130,20 +135,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             photoUrl: profile?.id_card_url
           };
 
-          console.log('[PWA DEBUG] Login complete! Calling onLogin with:', user);
+          console.log('[PWA DEBUG] Login complete! Calling onLogin');
           onLogin?.(user);
-          setLoading(false);
-        } catch (fetchError) {
-          console.error('[PWA DEBUG] Exception during profile fetch:', fetchError);
-          // Fallback - login with basic auth data
+        } catch (fetchError: any) {
+          console.error('[PWA DEBUG] Profile fetch failed:', fetchError.message);
+          // Fallback - login with auth metadata
           const user: UserProfile = {
-            name: authData.user.user_metadata?.name || 'Student',
+            name: authData.user.user_metadata?.name || authData.user.email?.split('@')[0] || 'Student',
             email: authData.user.email || email,
             id: authData.user.user_metadata?.student_id || '000000',
             photoUrl: undefined
           };
-          console.log('[PWA DEBUG] Using fallback user:', user);
+          console.log('[PWA DEBUG] Using fallback user');
           onLogin?.(user);
+        } finally {
           setLoading(false);
         }
       }
