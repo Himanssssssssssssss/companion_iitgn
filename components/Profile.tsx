@@ -5,7 +5,6 @@ import { supabase, updateProfileImages } from '../lib/supabase';
 import { QRCodeSVG } from 'qrcode.react';
 import imageCompression from 'browser-image-compression';
 import jsQR from 'jsqr';
-import ImageEditor from './ImageEditor';
 
 interface ProfileProps {
     user: UserProfile;
@@ -27,9 +26,6 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
 
     const idImageInputRef = useRef<HTMLInputElement>(null);
     const qrImageInputRef = useRef<HTMLInputElement>(null);
-
-    const [showImageEditor, setShowImageEditor] = useState(false);
-    const [tempImage, setTempImage] = useState<string | null>(null);
 
     // Load ID card from local storage on mount
     useEffect(() => {
@@ -110,49 +106,27 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // Read file as data URL for preview/editing
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            setTempImage(reader.result as string);
-            setShowImageEditor(true);
-        };
-        reader.readAsDataURL(file);
-    };
-
-    const handleSaveEditedImage = async (editedImageDataUrl: string) => {
         setUploading(true);
         try {
-            // Convert data URL to blob then to file for compression
-            const response = await fetch(editedImageDataUrl);
-            const blob = await response.blob();
-            const file = new File([blob], 'id-card.jpg', { type: 'image/jpeg' });
-
             // Compress image
             const compressedFile = await compressImage(file, 200);
 
             // Convert to Base64 for Local Storage
-            const finalReader = new FileReader();
-            finalReader.onloadend = () => {
-                const base64String = finalReader.result as string;
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64String = reader.result as string;
                 localStorage.setItem('local_id_card', base64String);
                 onUpdateUser({ ...user, photoUrl: base64String });
-                setShowImageEditor(false);
-                setTempImage(null);
                 alert('ID card saved locally!');
                 setUploading(false);
             };
-            finalReader.readAsDataURL(compressedFile);
+            reader.readAsDataURL(compressedFile);
 
         } catch (error) {
             console.error('Upload error:', error);
             alert('Error saving ID card');
             setUploading(false);
         }
-    };
-
-    const handleCancelEdit = () => {
-        setShowImageEditor(false);
-        setTempImage(null);
     };
 
     const handleDeleteIdCard = () => {
@@ -250,15 +224,6 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
 
     return (
         <div className="space-y-6 pb-24">
-            {/* Image Editor Modal */}
-            {showImageEditor && tempImage && (
-                <ImageEditor
-                    imageSrc={tempImage}
-                    onSave={handleSaveEditedImage}
-                    onCancel={handleCancelEdit}
-                />
-            )}
-
             {/* Profile Card with Edit */}
             <div className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50 relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-primary-600 to-purple-600 opacity-20"></div>
