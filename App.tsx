@@ -24,28 +24,37 @@ const App: React.FC = () => {
     homeWidgetsOrder: ['CHECKLIST', 'NEXT_MEAL', 'ID_CARD'] // Default order
   });
 
-  // Load user session from Supabase on mount
+  // ZOMBIE SESSION FIX: Active Session Verification
   useEffect(() => {
     let mounted = true;
+    let authSubscription: any = null;
 
-    const loadSession = async () => {
-      // Set a timeout to prevent infinite loading
-      const loadingTimeout = setTimeout(() => {
-        if (mounted) setLoading(false);
-      }, 3000);
+    // Part 1: Sequential Initialization
+    const initializeSession = async () => {
+      console.log('[Session] Initializing...');
 
       try {
-        // 1. Try to load from localStorage first (fastest & offline support)
+        // 1a. Load cached user first for immediate UI
         const cachedUser = localStorage.getItem('iitgn_user_profile');
         if (cachedUser && mounted) {
           setUser(JSON.parse(cachedUser));
         }
 
-        // 2. Check Supabase session
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // 1b. Explicitly get session (don't rely on listener alone)
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        console.log('[Session] getSession result:', session?.user?.id || 'No session');
+
+        if (sessionError) {
+          console.error('[Session] Error:', sessionError);
+          if (mounted) {
+            setUser(null);
+            localStorage.removeItem('iitgn_user_profile');
+          }
+          return;
+        }
 
         if (session?.user) {
-          // Get user profile from database
+          // Verify profile exists in database
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('*')
@@ -60,50 +69,68 @@ const App: React.FC = () => {
               photoUrl: profile.id_card_url
             };
             setUser(userProfile);
-            // Update cache
             localStorage.setItem('iitgn_user_profile', JSON.stringify(userProfile));
+            localStorage.setItem('session_user_id', session.user.id);
 
-            // --- OFFLINE DATA SYNC ---
-            // Cache Mess Menu
-            const { data: messData } = await supabase.from('mess_menu').select('*');
-            if (messData) {
-              localStorage.setItem('cached_mess_menu', JSON.stringify(messData));
-            }
-
-            // Cache Bus Schedule
-            const { data: busData } = await supabase.from('bus_schedules').select('*');
-            if (busData) {
-              localStorage.setItem('cached_bus_schedules', JSON.stringify(busData));
+            // Background: Cache data for offline use
+            supabase.from('mess_menu').select('*').then(({ data }) => {
+              if (data) localStorage.setItem('cached_mess_menu', JSON.stringify(data));
+            });
+            supabase.from('bus_schedules').select('*').then(({ data }) => {
+              if (data) localStorage.setItem('cached_bus_schedules', JSON.stringify(data));
+            });
+          } else {
+            console.warn('[Session] Profile not found or error:', profileError);
+            if (mounted) {
+              setUser(null);
+              localStorage.removeItem('iitgn_user_profile');
             }
           }
         } else if (!cachedUser && mounted) {
           setUser(null);
         }
 
-        // Load checklist from localStorage
+        // Load checklist and settings
         const storedChecklist = await getChecklist();
         if (storedChecklist && Array.isArray(storedChecklist) && mounted) {
           setChecklist(storedChecklist);
         }
 
-        // Load settings from localStorage
         const storedSettings = await getSettings();
         if (storedSettings && mounted) {
           setSettings(storedSettings as AppSettings);
         }
       } catch (error) {
-        console.error('Error loading session:', error);
+        console.error('[Session] Init error:', error);
+        if (mounted) {
+          setUser(null);
+          localStorage.removeItem('iitgn_user_profile');
+        }
       } finally {
-        clearTimeout(loadingTimeout);
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          console.log('[Session] Initialization complete');
+        }
       }
     };
 
-    loadSession();
+    // Part 3: Loading Safety Net (10 seconds)
+    const safetyTimeout = setTimeout(() => {
+      if (mounted && loading) {
+        console.error('[Session] Hung for 10s, forcing reload');
+        alert('Session timeout detected. Refreshing...');
+        localStorage.clear();
+        window.location.reload();
+      }
+    }, 10000);
 
-    // Listen for auth state changes
+    initializeSession();
+
+    // Set up auth listener AFTER initial check
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
+
+      console.log('[Session] Auth event:', event);
 
       if (event === 'SIGNED_IN' && session?.user) {
         const { data: profile } = await supabase
@@ -121,21 +148,60 @@ const App: React.FC = () => {
           };
           setUser(userProfile);
           localStorage.setItem('iitgn_user_profile', JSON.stringify(userProfile));
+          localStorage.setItem('session_user_id', session.user.id);
         }
-      } else if (event === 'SIGNED_OUT') {
-        if (mounted) {
+      } else if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+        if (event === 'SIGNED_OUT' && mounted) {
           setUser(null);
           setChecklist([]);
           localStorage.removeItem('iitgn_user_profile');
+          localStorage.removeItem('session_user_id');
         }
       }
     });
 
+    authSubscription = subscription;
+
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      clearTimeout(safetyTimeout);
+      authSubscription?.unsubscribe();
     };
   }, []);
+
+  // Part 2: Tab Focus Re-validation
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[Session] Tab visible, re-validating...');
+
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const cachedUserId = localStorage.getItem('session_user_id');
+
+          if (!session && user) {
+            console.warn('[Session] Session lost, forcing logout');
+            setUser(null);
+            setChecklist([]);
+            localStorage.clear();
+            alert('Session expired. Please log in again.');
+          } else if (session && cachedUserId && session.user.id !== cachedUserId) {
+            console.error('[Session] User ID mismatch, forcing logout');
+            await supabase.auth.signOut();
+            setUser(null);
+            setChecklist([]);
+            localStorage.clear();
+            window.location.reload();
+          }
+        } catch (error) {
+          console.error('[Session] Re-validation failed:', error);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [user]);
 
   // Save checklist to localStorage whenever it changes
   useEffect(() => {
