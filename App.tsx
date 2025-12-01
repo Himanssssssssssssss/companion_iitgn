@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { HashRouter } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './components/Home';
@@ -14,200 +14,175 @@ import { getChecklist, saveChecklist, getSettings, saveSettings } from './lib/st
 const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>(Tab.HOME);
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [_user, _setUser] = useState<UserProfile | null>(null);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
 
   // App Settings State
   const [settings, setSettings] = useState<AppSettings>({
     showIdOnHome: true,
     showMessOnHome: true,
-    homeWidgetsOrder: ['CHECKLIST', 'NEXT_MEAL', 'ID_CARD'] // Default order
+    homeWidgetsOrder: ['CHECKLIST', 'NEXT_MEAL', 'ID_CARD']
   });
 
-  // ZOMBIE SESSION FIX: Active Session Verification
-  useEffect(() => {
-    let mounted = true;
-    let authSubscription: any = null;
+  // Ref to track user state for event listeners without triggering re-renders
+  const userRef = useRef(_user);
 
-    // Part 1: Sequential Initialization
-    const initializeSession = async () => {
-      console.log('[Session] Initializing...');
+  // Wrapper to keep ref in sync with state
+  const setUser = useCallback((userOrUpdater: UserProfile | null | ((prev: UserProfile | null) => UserProfile | null)) => {
+    if (typeof userOrUpdater === 'function') {
+      _setUser(prevUser => {
+        const newUser = userOrUpdater(prevUser);
+        userRef.current = newUser;
+        return newUser;
+      });
+    } else {
+      userRef.current = userOrUpdater;
+      _setUser(userOrUpdater);
+    }
+  }, []);
 
-      try {
-        // 1a. Load cached user first for immediate UI
-        const cachedUser = localStorage.getItem('iitgn_user_profile');
-        if (cachedUser && mounted) {
-          setUser(JSON.parse(cachedUser));
-        }
+  // Load user profile from database
+  const loadUserProfile = useCallback(async (authUserId: string) => {
+    try {
+      console.log(`[Session] Loading profile for: ${authUserId}`);
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUserId)
+        .single();
 
-        // 1b. Explicitly get session (don't rely on listener alone)
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        console.log('[Session] getSession result:', session?.user?.id || 'No session');
-
-        if (sessionError) {
-          console.error('[Session] Error:', sessionError);
-          if (mounted) {
-            setUser(null);
-            localStorage.removeItem('iitgn_user_profile');
-          }
-          return;
-        }
-
-        if (session?.user) {
-          // Verify profile exists in database
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-
-          if (profile && !profileError && mounted) {
-            const userProfile: UserProfile = {
-              name: profile.name,
-              email: profile.email,
-              id: profile.student_id,
-              photoUrl: profile.id_card_url
-            };
-            setUser(userProfile);
-            localStorage.setItem('iitgn_user_profile', JSON.stringify(userProfile));
-            localStorage.setItem('session_user_id', session.user.id);
-
-            // Background: Cache data for offline use
-            supabase.from('mess_menu').select('*').then(({ data }) => {
-              if (data) localStorage.setItem('cached_mess_menu', JSON.stringify(data));
-            });
-            supabase.from('bus_schedules').select('*').then(({ data }) => {
-              if (data) localStorage.setItem('cached_bus_schedules', JSON.stringify(data));
-            });
-          } else {
-            console.warn('[Session] Profile not found or error:', profileError);
-            if (mounted) {
-              setUser(null);
-              localStorage.removeItem('iitgn_user_profile');
-            }
-          }
-        } else if (!cachedUser && mounted) {
-          setUser(null);
-        }
-
-        // Load checklist and settings
-        const storedChecklist = await getChecklist();
-        if (storedChecklist && Array.isArray(storedChecklist) && mounted) {
-          setChecklist(storedChecklist);
-        }
-
-        const storedSettings = await getSettings();
-        if (storedSettings && mounted) {
-          setSettings(storedSettings as AppSettings);
-        }
-      } catch (error) {
-        console.error('[Session] Init error:', error);
-        if (mounted) {
-          setUser(null);
-          localStorage.removeItem('iitgn_user_profile');
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-          console.log('[Session] Initialization complete');
-        }
+      if (profileError || !profile) {
+        console.error('[Session] Error fetching profile:', profileError);
+        setUser(null);
+        localStorage.removeItem('iitgn_user_profile');
+        return;
       }
-    };
 
-    initializeSession();
+      const userProfile: UserProfile = {
+        name: profile.name,
+        email: profile.email,
+        id: profile.student_id,
+        photoUrl: profile.id_card_url
+      };
 
-    // Set up auth listener AFTER initial check
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
+      setUser(userProfile);
+      localStorage.setItem('iitgn_user_profile', JSON.stringify(userProfile));
+      localStorage.setItem('session_user_id', authUserId);
 
-      console.log('[Session] Auth event:', event);
+      // Background: Cache QR code data locally
+      if (profile.qr_code_url) {
+        localStorage.setItem('cached_qr_code', profile.qr_code_url);
+      }
 
-      if (event === 'SIGNED_IN' && session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+      // Background: Cache data for offline use
+      supabase.from('mess_menu').select('*').then(({ data }) => {
+        if (data) localStorage.setItem('cached_mess_menu', JSON.stringify(data));
+      });
+      supabase.from('bus_schedules').select('*').then(({ data }) => {
+        if (data) localStorage.setItem('cached_bus_schedules', JSON.stringify(data));
+      });
 
-        if (profile && mounted) {
-          const userProfile: UserProfile = {
-            name: profile.name,
-            email: profile.email,
-            id: profile.student_id,
-            photoUrl: profile.id_card_url
-          };
-          setUser(userProfile);
-          localStorage.setItem('iitgn_user_profile', JSON.stringify(userProfile));
-          localStorage.setItem('session_user_id', session.user.id);
-        }
-      } else if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-        if (event === 'SIGNED_OUT' && mounted) {
+    } catch (error) {
+      console.error('[Session] Unexpected error in loadUserProfile:', error);
+      setUser(null);
+    }
+  }, [setUser]);
+
+  // 1. ROBUST INITIALIZATION: Check session FIRST, then listen
+  useEffect(() => {
+    let subscription: any = null;
+
+    const initializeAndListen = async () => {
+      setLoading(true);
+
+      // A. Active Check: Get session immediately
+      const { data: { session }, error } = await supabase.auth.getSession();
+
+      if (session?.user) {
+        console.log("✅ Found active session on load");
+        await loadUserProfile(session.user.id);
+      } else {
+        console.log("⚪ No active session on load");
+        setUser(null);
+      }
+
+      // Load checklist and settings
+      const storedChecklist = await getChecklist();
+      if (storedChecklist && Array.isArray(storedChecklist)) {
+        setChecklist(storedChecklist);
+      }
+
+      const storedSettings = await getSettings();
+      if (storedSettings) {
+        setSettings(storedSettings as AppSettings);
+      }
+
+      setLoading(false);
+
+      // B. Passive Listen: Subscribe to future changes
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log(`[Session] Auth event: ${event}`);
+
+        if (event === 'SIGNED_IN' && session?.user) {
+          // Only load if we don't already have this user loaded
+          if (session.user.id !== userRef.current?.id) {
+            await loadUserProfile(session.user.id);
+          }
+        } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setChecklist([]);
           localStorage.removeItem('iitgn_user_profile');
           localStorage.removeItem('session_user_id');
         }
-      }
-    });
+      });
 
-    authSubscription = subscription;
+      subscription = data.subscription;
+    };
+
+    initializeAndListen();
 
     return () => {
-      mounted = false;
-      authSubscription?.unsubscribe();
+      subscription?.unsubscribe();
     };
-  }, []);
+  }, [loadUserProfile, setUser]);
 
-  // Part 2: Tab Focus Re-validation
+  // 2. TAB FOCUS CHECK: Kill zombie sessions when tab becomes visible
   useEffect(() => {
     const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[Session] Tab visible, re-validating...');
+      if (document.visibilityState === 'visible' && userRef.current) {
+        console.log('[Session] Tab focused, validating session...');
+        const { data: { session }, error } = await supabase.auth.getSession();
 
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const cachedUserId = localStorage.getItem('session_user_id');
-
-          if (!session && user) {
-            console.warn('[Session] Session lost, forcing logout');
-            setUser(null);
-            setChecklist([]);
-            localStorage.clear();
-            alert('Session expired. Please log in again.');
-          } else if (session && cachedUserId && session.user.id !== cachedUserId) {
-            console.error('[Session] User ID mismatch, forcing logout');
-            await supabase.auth.signOut();
-            setUser(null);
-            setChecklist([]);
-            localStorage.clear();
-            window.location.reload();
-          }
-        } catch (error) {
-          console.error('[Session] Re-validation failed:', error);
+        // If session is missing or user ID mismatch, force logout
+        const cachedUserId = localStorage.getItem('session_user_id');
+        if (error || !session || (cachedUserId && session.user.id !== cachedUserId)) {
+          console.warn('[Session] Zombie session detected! Logging out.');
+          alert("Your session has expired. Please log in again.");
+          await handleLogout();
         }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [user]);
+  }, []);
 
   // Save checklist to localStorage whenever it changes
   useEffect(() => {
-    if (user) {
+    if (_user) {
       saveChecklist(checklist);
     }
-  }, [checklist, user]);
+  }, [checklist, _user]);
 
   // Save settings to localStorage whenever they change
   useEffect(() => {
-    if (user) {
+    if (_user) {
       saveSettings(settings);
     }
-  }, [settings, user]);
+  }, [settings, _user]);
 
-  const handleLogin = (loggedInUser: UserProfile) => {
-    setUser(loggedInUser);
+  const handleUpdateUser = (updatedUser: UserProfile) => {
+    setUser(updatedUser);
   };
 
   const handleLogout = async () => {
@@ -220,29 +195,25 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (activeTab) {
       case Tab.HOME:
-        return (
-          <Home
-            user={user!}
-            settings={settings}
-            onChangeTab={setActiveTab}
-            checklist={checklist}
-            setChecklist={setChecklist}
-          />
-        );
+        return <Home
+          user={_user!}
+          settings={settings}
+          onChangeTab={setActiveTab}
+          checklist={checklist}
+          setChecklist={setChecklist}
+        />;
       case Tab.BUS:
         return <BusSchedule />;
       case Tab.MESS:
-        return <Mess user={user!} />;
+        return <Mess user={_user!} />;
       case Tab.PROFILE:
-        return (
-          <Profile
-            user={user!}
-            settings={settings}
-            onUpdateUser={setUser}
-            onUpdateSettings={setSettings}
-            onLogout={handleLogout}
-          />
-        );
+        return <Profile
+          user={_user!}
+          settings={settings}
+          onUpdateUser={handleUpdateUser}
+          onUpdateSettings={setSettings}
+          onLogout={handleLogout}
+        />;
       default:
         return null;
     }
@@ -253,8 +224,8 @@ const App: React.FC = () => {
       <SplashScreen onFinish={() => setLoading(false)} />
 
       {!loading && (
-        !user ? (
-          <Login onLogin={handleLogin} />
+        !_user ? (
+          <Login onLogin={() => { }} />
         ) : (
           <Layout activeTab={activeTab} onTabChange={setActiveTab}>
             {renderContent()}
