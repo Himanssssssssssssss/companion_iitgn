@@ -222,7 +222,10 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
                 console.error('Error updating profile:', error);
                 alert('Failed to update profile');
             } else {
-                onUpdateUser({ ...user, name: editName, id: editId });
+                const updatedUser = { ...user, name: editName, id: editId };
+                onUpdateUser(updatedUser);
+                // Update localStorage cache
+                localStorage.setItem('iitgn_user_profile', JSON.stringify(updatedUser));
                 setIsEditing(false);
                 alert('Profile updated successfully!');
             }
@@ -264,14 +267,6 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
                 <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-primary-600 to-purple-600 opacity-20"></div>
 
                 <div className="relative z-10 flex flex-col items-center">
-                    <div className="w-24 h-24 rounded-full bg-slate-700 border-4 border-slate-800 mb-4 flex items-center justify-center overflow-hidden shadow-xl">
-                        {user.photoUrl ? (
-                            <img src={user.photoUrl} alt="Profile" className="w-full h-full object-cover" />
-                        ) : (
-                            <span className="text-3xl font-bold text-slate-400">{user.name.charAt(0)}</span>
-                        )}
-                    </div>
-
                     {isEditing ? (
                         <div className="w-full space-y-3 mb-4">
                             <input
