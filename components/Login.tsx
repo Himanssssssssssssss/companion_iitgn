@@ -71,29 +71,39 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         onLogin(user);
       } else {
         // Sign in
-        console.log('Attempting signin...');
+        console.log('[PWA DEBUG] Starting signin flow');
+        console.log('[PWA DEBUG] Email:', email);
 
         const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password
         });
 
+        console.log('[PWA DEBUG] Auth response:', {
+          hasData: !!authData,
+          hasUser: !!authData?.user,
+          hasSession: !!authData?.session,
+          error: signInError?.message
+        });
+
         if (signInError) {
-          console.error('Signin error:', signInError);
+          console.error('[PWA DEBUG] Signin error:', signInError);
           setError(signInError.message);
           setLoading(false);
           return;
         }
 
         if (!authData.user) {
+          console.error('[PWA DEBUG] No user in auth response');
           setError('Login failed. Please try again.');
           setLoading(false);
           return;
         }
 
-        console.log('Signin successful! Fetching profile...');
+        console.log('[PWA DEBUG] Auth successful! User ID:', authData.user.id);
+        console.log('[PWA DEBUG] Fetching profile from database...');
 
-        // Try to fetch profile, but don't block login if it fails
+        // Try to fetch profile
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('*')
@@ -145,8 +155,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <button
               onClick={() => { setMode('signin'); setError(''); }}
               className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${mode === 'signin'
-                  ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/25'
-                  : 'text-slate-400 hover:text-white'
+                ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/25'
+                : 'text-slate-400 hover:text-white'
                 }`}
             >
               Sign In
@@ -154,8 +164,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <button
               onClick={() => { setMode('signup'); setError(''); }}
               className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${mode === 'signup'
-                  ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/25'
-                  : 'text-slate-400 hover:text-white'
+                ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/25'
+                : 'text-slate-400 hover:text-white'
                 }`}
             >
               Sign Up
