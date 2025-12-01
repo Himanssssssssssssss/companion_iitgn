@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { User, Mail, Lock, ArrowRight, Loader2, AlertCircle, School } from 'lucide-react';
 
 interface LoginProps {
-  onLogin: (user: UserProfile) => void;
+  onLogin?: (user: UserProfile) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
@@ -68,7 +68,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           photoUrl: undefined
         };
 
-        onLogin(user);
+        onLogin?.(user);
       } else {
         // Sign in
         console.log('[PWA DEBUG] Starting signin flow');
@@ -122,8 +122,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           photoUrl: profile?.id_card_url
         };
 
-        console.log('Login complete. Updating app state...', user);
-        onLogin(user);
+        console.log('Login complete. User:', user);
+        onLogin?.(user);
       }
     } catch (err: any) {
       console.error('Login error:', err);

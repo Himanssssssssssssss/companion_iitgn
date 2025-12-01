@@ -225,7 +225,7 @@ const App: React.FC = () => {
 
       {!loading && (
         !_user ? (
-          <Login onLogin={() => { }} />
+          <Login />
         ) : (
           <Layout activeTab={activeTab} onTabChange={setActiveTab}>
             {renderContent()}
