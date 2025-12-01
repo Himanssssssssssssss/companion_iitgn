@@ -1,0 +1,150 @@
+{
+    "campus": [
+        {
+            "id": "1",
+            "source": "Campus",
+            "destination": "JRHA",
+            "departureTime": "08:55",
+            "displayTime": "08:55 AM",
+            "type": "29-Seater"
+        },
+        {
+            "id": "2",
+            "source": "Campus",
+            "destination": "JRHA",
+            "departureTime": "16:30",
+            "displayTime": "04:30 PM",
+            "type": "29-Seater"
+        },
+        {
+            "id": "3",
+            "source": "Campus",
+            "destination": "JRHA",
+            "departureTime": "21:00",
+            "displayTime": "09:00 PM",
+            "type": "29-Seater"
+        },
+        {
+            "id": "4",
+            "source": "JRHA",
+            "destination": "Campus",
+            "departureTime": "08:45",
+            "displayTime": "08:45 AM",
+            "type": "EECO"
+        },
+        {
+            "id": "5",
+            "source": "JRHA",
+            "destination": "Campus",
+            "departureTime": "09:15",
+            "displayTime": "09:15 AM",
+            "type": "EECO"
+        },
+        {
+            "id": "6",
+            "source": "JRHA",
+            "destination": "Campus",
+            "departureTime": "13:00",
+            "displayTime": "01:00 PM",
+            "type": "29-Seater"
+        },
+        {
+            "id": "7",
+            "source": "JRHA",
+            "destination": "Campus",
+            "departureTime": "16:00",
+            "displayTime": "04:00 PM",
+            "type": "29-Seater"
+        },
+        {
+            "id": "8",
+            "source": "JRHA",
+            "destination": "Campus",
+            "departureTime": "20:30",
+            "displayTime": "08:30 PM",
+            "type": "EECO"
+        }
+    ],
+    "kudasan": [
+        {
+            "id": "9",
+            "source": "Campus",
+            "destination": "Kudasan",
+            "departureTime": "09:00",
+            "displayTime": "09:00 AM",
+            "type": "56-Seater"
+        },
+        {
+            "id": "10",
+            "source": "Campus",
+            "destination": "Kudasan",
+            "departureTime": "10:30",
+            "displayTime": "10:30 AM",
+            "type": "29-Seater"
+        },
+        {
+            "id": "11",
+            "source": "Campus",
+            "destination": "Kudasan",
+            "departureTime": "13:00",
+            "displayTime": "01:00 PM",
+            "type": "56-Seater"
+        },
+        {
+            "id": "12",
+            "source": "Campus",
+            "destination": "Kudasan",
+            "departureTime": "17:00",
+            "displayTime": "05:00 PM",
+            "type": "56-Seater"
+        },
+        {
+            "id": "13",
+            "source": "Campus",
+            "destination": "Kudasan",
+            "departureTime": "19:30",
+            "displayTime": "07:30 PM",
+            "type": "29-Seater"
+        },
+        {
+            "id": "14",
+            "source": "Kudasan",
+            "destination": "Campus",
+            "departureTime": "09:30",
+            "displayTime": "09:30 AM",
+            "type": "56-Seater"
+        },
+        {
+            "id": "15",
+            "source": "Kudasan",
+            "destination": "Campus",
+            "departureTime": "11:00",
+            "displayTime": "11:00 AM",
+            "type": "29-Seater"
+        },
+        {
+            "id": "16",
+            "source": "Kudasan",
+            "destination": "Campus",
+            "departureTime": "13:30",
+            "displayTime": "01:30 PM",
+            "type": "56-Seater"
+        },
+        {
+            "id": "17",
+            "source": "Kudasan",
+            "destination": "Campus",
+            "departureTime": "17:30",
+            "displayTime": "05:30 PM",
+            "type": "56-Seater"
+        },
+        {
+            "id": "18",
+            "source": "Kudasan",
+            "destination": "Campus",
+            "departureTime": "20:00",
+            "displayTime": "08:00 PM",
+            "type": "29-Seater"
+        }
+    ]
+}

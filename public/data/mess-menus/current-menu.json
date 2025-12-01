@@ -1,0 +1,50 @@
+{
+    "breakfast": {
+        "time": "7:30 AM - 9:30 AM",
+        "items": [
+            "Aloo Paratha",
+            "Curd",
+            "Pickle",
+            "Tea/Coffee",
+            "Milk",
+            "Cornflakes",
+            "Bread",
+            "Butter",
+            "Jam"
+        ]
+    },
+    "lunch": {
+        "time": "12:30 PM - 2:30 PM",
+        "items": [
+            "Paneer Makhani",
+            "Mix Veg",
+            "Dal Tadka",
+            "Jeera Rice",
+            "Roti",
+            "Salad",
+            "Raita",
+            "Papad"
+        ]
+    },
+    "snacks": {
+        "time": "4:30 PM - 6:00 PM",
+        "items": [
+            "Samosa",
+            "Green Chutney",
+            "Sweet Chutney",
+            "Tea/Coffee"
+        ]
+    },
+    "dinner": {
+        "time": "7:30 PM - 9:30 PM",
+        "items": [
+            "Kadhai Paneer",
+            "Egg Curry",
+            "Rice",
+            "Chapati",
+            "Dal Fry",
+            "Gulab Jamun",
+            "Salad"
+        ]
+    }
+}

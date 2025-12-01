@@ -1,0 +1,46 @@
+[
+    {
+        "id": "1",
+        "title": "Blithchron 2024 - Annual Cultural Fest",
+        "description": "Join us for the biggest cultural celebration of the year featuring music, dance, and drama performances!",
+        "date": "2024-02-14",
+        "time": "18:00",
+        "venue": "Open Air Theatre",
+        "category": "Cultural",
+        "imageUrl": "https://picsum.photos/400/200?random=1",
+        "organizerContact": "cultural@iitgn.ac.in"
+    },
+    {
+        "id": "2",
+        "title": "Guest Lecture: AI Ethics",
+        "description": "Distinguished speaker Prof. John Doe discusses the ethical implications of artificial intelligence in modern society.",
+        "date": "2024-02-15",
+        "time": "16:00",
+        "venue": "Jibben Auditorium",
+        "category": "Academic",
+        "imageUrl": "https://picsum.photos/400/200?random=2",
+        "organizerContact": "academics@iitgn.ac.in"
+    },
+    {
+        "id": "3",
+        "title": "Inter-Hostel Cricket Tournament",
+        "description": "Annual cricket tournament between all hostels. Come support your hostel team!",
+        "date": "2024-02-16",
+        "time": "09:00",
+        "venue": "Sports Complex",
+        "category": "Sports",
+        "imageUrl": "https://picsum.photos/400/200?random=3",
+        "organizerContact": "sports@iitgn.ac.in"
+    },
+    {
+        "id": "4",
+        "title": "Startup Showcase",
+        "description": "Student startups present their innovative ideas and products. Network with entrepreneurs!",
+        "date": "2024-02-18",
+        "time": "14:00",
+        "venue": "Academic Block 5",
+        "category": "Technical",
+        "imageUrl": "https://picsum.photos/400/200?random=4",
+        "organizerContact": "ecell@iitgn.ac.in"
+    }
+]

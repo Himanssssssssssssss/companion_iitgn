@@ -1,0 +1,7 @@
+{
+  "name": "IITGN Companion",
+  "description": "A comprehensive campus companion app for IIT Gandhinagar students featuring bus schedules, mess menus, and AI-powered text scanning.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
