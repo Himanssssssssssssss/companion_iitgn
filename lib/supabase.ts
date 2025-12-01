@@ -1,16 +1,7 @@
-persistSession: true,
-    detectSessionInUrl: true
+console.error('Error getting user:', error);
+return null;
     }
-});
-
-// Helper function to get current user
-export const getCurrentUser = async () => {
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error) {
-        console.error('Error getting user:', error);
-        return null;
-    }
-    return user;
+return user;
 };
 
 // Helper function to get user profile
