@@ -101,29 +101,51 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         }
 
         console.log('[PWA DEBUG] Auth successful! User ID:', authData.user.id);
-        console.log('[PWA DEBUG] Fetching profile from database...');
+        console.log('[PWA DEBUG] Now fetching profile...');
 
-        // Try to fetch profile
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', authData.user.id)
-          .single();
+        // Try to fetch profile with detailed logging
+        try {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', authData.user.id)
+            .single();
 
-        if (profileError) {
-          console.warn('Profile fetch warning:', profileError);
+          console.log('[PWA DEBUG] Profile fetch result:', {
+            hasProfile: !!profile,
+            error: profileError?.message,
+            errorDetails: profileError
+          });
+
+          if (profileError) {
+            console.error('[PWA DEBUG] Profile fetch error:', profileError);
+            // Don't fail login - continue with auth data
+          }
+
+          // Construct user object
+          const user: UserProfile = {
+            name: profile?.name || authData.user.user_metadata?.name || 'Student',
+            email: profile?.email || authData.user.email || email,
+            id: profile?.student_id || authData.user.user_metadata?.student_id || '000000',
+            photoUrl: profile?.id_card_url
+          };
+
+          console.log('[PWA DEBUG] Login complete! Calling onLogin with:', user);
+          onLogin?.(user);
+          setLoading(false);
+        } catch (fetchError) {
+          console.error('[PWA DEBUG] Exception during profile fetch:', fetchError);
+          // Fallback - login with basic auth data
+          const user: UserProfile = {
+            name: authData.user.user_metadata?.name || 'Student',
+            email: authData.user.email || email,
+            id: authData.user.user_metadata?.student_id || '000000',
+            photoUrl: undefined
+          };
+          console.log('[PWA DEBUG] Using fallback user:', user);
+          onLogin?.(user);
+          setLoading(false);
         }
-
-        // Construct user object - Fallback to auth data if profile missing
-        const user: UserProfile = {
-          name: profile?.name || authData.user.user_metadata?.name || 'Student',
-          email: profile?.email || authData.user.email || email,
-          id: profile?.student_id || authData.user.user_metadata?.student_id || '000000',
-          photoUrl: profile?.id_card_url
-        };
-
-        console.log('Login complete. User:', user);
-        onLogin?.(user);
       }
     } catch (err: any) {
       console.error('Login error:', err);
