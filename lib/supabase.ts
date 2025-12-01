@@ -3,10 +3,27 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-console.error('Error getting user:', error);
-return null;
+if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('Missing Supabase environment variables!');
+    console.error('Please add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env.local file');
+}
+
+export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
+    auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        storage: window.localStorage,
+    },
+});
+
+// Helper function to get current user
+export const getCurrentUser = async () => {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) {
+        console.error('Error getting user:', error);
+        return null;
     }
-return user;
+    return user;
 };
 
 // Helper function to get user profile
