@@ -15,6 +15,10 @@ interface ProfileProps {
 }
 
 const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdateSettings, onLogout }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editName, setEditName] = useState(user.name);
+    const [editId, setEditId] = useState(user.id);
+
     const [activeTab, setActiveTab] = useState<'ID' | 'SETTINGS'>('ID');
     const [uploading, setUploading] = useState(false);
     const [uploadingQR, setUploadingQR] = useState(false);
@@ -22,6 +26,14 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
 
     const idImageInputRef = useRef<HTMLInputElement>(null);
     const qrImageInputRef = useRef<HTMLInputElement>(null);
+
+    // Load ID card from local storage on mount
+    useEffect(() => {
+        const localIdCard = localStorage.getItem('local_id_card');
+        if (localIdCard) {
+            onUpdateUser({ ...user, photoUrl: localIdCard });
+        }
+    }, []);
 
     // Load QR code data on mount
     useEffect(() => {
@@ -35,7 +47,7 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
                     .single();
 
                 if (profile?.qr_code_url) {
-                    setQrCodeData(profile.qr_code_url); // This is now QR data, not URL
+                    setQrCodeData(profile.qr_code_url);
                 }
             }
         };
@@ -44,7 +56,7 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
 
     const compressImage = async (file: File, maxSizeKB: number = 200): Promise<File> => {
         const options = {
-            maxSizeMB: maxSizeKB / 1024, // Convert KB to MB
+            maxSizeMB: maxSizeKB / 1024,
             maxWidthOrHeight: 1024,
             useWebWorker: true,
             fileType: 'image/jpeg'
@@ -96,52 +108,31 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
 
         setUploading(true);
         try {
-            const { data: { user: authUser } } = await supabase.auth.getUser();
-            if (!authUser) {
-                alert('Please sign in to upload your ID card');
-                setUploading(false);
-                return;
-            }
-
-            // Compress image to under 200KB
+            // Compress image
             const compressedFile = await compressImage(file, 200);
-            console.log(`Original size: ${(file.size / 1024).toFixed(2)}KB, Compressed: ${(compressedFile.size / 1024).toFixed(2)}KB`);
 
-            // Upload to Supabase Storage
-            const fileExt = 'jpg'; // Always use JPG after compression
-            const fileName = `${authUser.id}/id-card.${fileExt}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from('id-cards')
-                .upload(fileName, compressedFile, {
-                    upsert: true,
-                    cacheControl: '3600',
-                    contentType: 'image/jpeg'
-                });
-
-            if (uploadError) {
-                alert('Failed to upload ID card. Please try again.');
-                console.error(uploadError);
+            // Convert to Base64 for Local Storage
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64String = reader.result as string;
+                localStorage.setItem('local_id_card', base64String);
+                onUpdateUser({ ...user, photoUrl: base64String });
+                alert('ID card saved locally!');
                 setUploading(false);
-                return;
-            }
+            };
+            reader.readAsDataURL(compressedFile);
 
-            // Get public URL
-            const { data: { publicUrl } } = supabase.storage
-                .from('id-cards')
-                .getPublicUrl(fileName);
-
-            // Update profile in database
-            await updateProfileImages(authUser.id, publicUrl, undefined);
-
-            // Update local state
-            onUpdateUser({ ...user, photoUrl: publicUrl });
-            alert('ID card uploaded successfully!');
         } catch (error) {
             console.error('Upload error:', error);
-            alert('Error uploading ID card');
-        } finally {
+            alert('Error saving ID card');
             setUploading(false);
+        }
+    };
+
+    const handleDeleteIdCard = () => {
+        if (confirm('Are you sure you want to delete your ID card?')) {
+            localStorage.removeItem('local_id_card');
+            onUpdateUser({ ...user, photoUrl: undefined });
         }
     };
 
@@ -151,45 +142,64 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
 
         setUploadingQR(true);
         try {
-            const { data: { user: authUser } } = await supabase.auth.getUser();
-            if (!authUser) {
-                alert('Please sign in to upload your QR code');
-                setUploadingQR(false);
-                return;
-            }
-
-            // Extract QR code data from image
             const qrData = await extractQRCode(file);
 
             if (!qrData) {
-                alert('Could not read QR code from image. Please try a clearer photo.');
+                alert('No QR code found in the image. Please try a clearer image.');
                 setUploadingQR(false);
                 return;
             }
 
-            console.log('Extracted QR data:', qrData);
+            const { data: { user: authUser } } = await supabase.auth.getUser();
+            if (!authUser) {
+                setUploadingQR(false);
+                return;
+            }
 
-            // Save QR data (not image) to database
+            // Save QR Data to Supabase
+            await updateProfileImages(authUser.id, undefined, qrData);
+            setQrCodeData(qrData);
+            alert('QR Code updated successfully!');
+
+        } catch (error) {
+            console.error('QR Upload error:', error);
+            alert('Error uploading QR code');
+        } finally {
+            setUploadingQR(false);
+        }
+    };
+
+    const handleDeleteQRCode = async () => {
+        if (confirm('Are you sure you want to delete your QR code?')) {
+            const { data: { user: authUser } } = await supabase.auth.getUser();
+            if (authUser) {
+                await updateProfileImages(authUser.id, undefined, ''); // Clear in DB
+                setQrCodeData(null);
+            }
+        }
+    };
+
+    const handleSaveProfile = async () => {
+        if (!editName.trim() || !editId.trim()) {
+            alert('Name and Roll Number cannot be empty');
+            return;
+        }
+
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
             const { error } = await supabase
                 .from('profiles')
-                .update({ qr_code_url: qrData }) // Store the QR data itself
+                .update({ name: editName, student_id: editId })
                 .eq('id', authUser.id);
 
             if (error) {
-                alert('Failed to save QR code. Please try again.');
-                console.error(error);
-                setUploadingQR(false);
-                return;
+                console.error('Error updating profile:', error);
+                alert('Failed to update profile');
+            } else {
+                onUpdateUser({ ...user, name: editName, id: editId });
+                setIsEditing(false);
+                alert('Profile updated successfully!');
             }
-
-            // Update local state
-            setQrCodeData(qrData);
-            alert('QR code extracted and saved successfully!');
-        } catch (error) {
-            console.error('Upload error:', error);
-            alert('Error processing QR code');
-        } finally {
-            setUploadingQR(false);
         }
     };
 

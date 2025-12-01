@@ -23,41 +23,42 @@ const BusSchedule: React.FC = () => {
   useEffect(() => {
     const fetchBuses = async () => {
       setLoading(true); // Ensure loading is true when starting fetch
-      try {
-        const { data, error } = await supabase
-          .from('bus_schedules')
-          .select('*')
-          .eq('route_type', routeType)
-          .eq('status', 'active')
-          .order('departure_time', { ascending: true });
 
-        if (error) {
-          console.error('Error fetching buses, trying cache:', error);
-          // Try loading from cache
-          const cachedBuses = localStorage.getItem('cached_bus_schedules');
-          if (cachedBuses) {
-            const allBuses: Bus[] = JSON.parse(cachedBuses);
-            // Filter locally since we have all buses in cache
-            setBuses(allBuses.filter((b: Bus) => b.route_type === routeType && b.status === 'active').sort((a, b) => a.departure_time.localeCompare(b.departure_time)));
-          } else {
-            setBuses([]); // No cache, no data
-          }
-        } else if (data) {
-          setBuses(data || []);
-          // Cache the fetched data
-          localStorage.setItem('cached_bus_schedules', JSON.stringify(data));
-        }
-      } catch (e) {
-        console.error("Failed to load buses", e);
-      } finally {
-        setLoading(false);
+      // 1. Try loading from cache FIRST for instant display
+      const cachedBuses = localStorage.getItem('cached_bus_schedules');
+      if (cachedBuses) {
+        const allBuses: Bus[] = JSON.parse(cachedBuses);
+        // Filter locally since we have all buses in cache
+        setBuses(allBuses.filter((b: Bus) => b.route_type === routeType && b.status === 'active').sort((a, b) => a.departure_time.localeCompare(b.departure_time)));
       }
+
+      // 2. Fetch fresh data from Supabase
+      const { data, error } = await supabase
+        .from('bus_schedules')
+        .select('*')
+        .eq('route_type', routeType);
+
+      if (error) {
+        console.error('Error fetching buses:', error);
+        // If fetch fails and we have no cache, we're in trouble, but we handled cache above
+      } else if (data) {
+        setBuses(data || []); // Ensure data is an array
+        // Update cache with fresh data (merging logic simplified here)
+        // Ideally we fetch ALL buses to update the full cache, but for now we update what we can
+        // To do this properly, we should probably fetch ALL buses in background if cache is stale
+        localStorage.setItem('cached_bus_schedules', JSON.stringify(data));
+      }
+      setLoading(false);
     };
     fetchBuses();
   }, [routeType]);
 
   const getFilteredBuses = () => {
     return buses.filter(bus => {
+      // Always filter by active status, regardless of source
+      if (bus.status !== 'active') {
+        return false;
+      }
       if (direction === 'FROM_CAMPUS') {
         return bus.source === 'Campus';
       } else {

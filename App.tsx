@@ -26,16 +26,18 @@ const App: React.FC = () => {
 
   // Load user session from Supabase on mount
   useEffect(() => {
+    let mounted = true;
+
     const loadSession = async () => {
-      // Set a timeout to prevent infinite loading (fixes blank screen issue)
+      // Set a timeout to prevent infinite loading
       const loadingTimeout = setTimeout(() => {
-        setLoading(false);
-      }, 3000); // 3 seconds max loading time
+        if (mounted) setLoading(false);
+      }, 3000);
 
       try {
         // 1. Try to load from localStorage first (fastest & offline support)
         const cachedUser = localStorage.getItem('iitgn_user_profile');
-        if (cachedUser) {
+        if (cachedUser && mounted) {
           setUser(JSON.parse(cachedUser));
         }
 
@@ -50,7 +52,7 @@ const App: React.FC = () => {
             .eq('id', session.user.id)
             .single();
 
-          if (profile && !profileError) {
+          if (profile && !profileError && mounted) {
             const userProfile: UserProfile = {
               name: profile.name,
               email: profile.email,
@@ -74,27 +76,26 @@ const App: React.FC = () => {
               localStorage.setItem('cached_bus_schedules', JSON.stringify(busData));
             }
           }
-        } else if (!cachedUser) {
-          // No session and no cache
+        } else if (!cachedUser && mounted) {
           setUser(null);
         }
 
         // Load checklist from localStorage
         const storedChecklist = await getChecklist();
-        if (storedChecklist && Array.isArray(storedChecklist)) {
+        if (storedChecklist && Array.isArray(storedChecklist) && mounted) {
           setChecklist(storedChecklist);
         }
 
         // Load settings from localStorage
         const storedSettings = await getSettings();
-        if (storedSettings) {
+        if (storedSettings && mounted) {
           setSettings(storedSettings as AppSettings);
         }
       } catch (error) {
         console.error('Error loading session:', error);
       } finally {
         clearTimeout(loadingTimeout);
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
 
@@ -102,6 +103,8 @@ const App: React.FC = () => {
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+
       if (event === 'SIGNED_IN' && session?.user) {
         const { data: profile } = await supabase
           .from('profiles')
@@ -109,7 +112,7 @@ const App: React.FC = () => {
           .eq('id', session.user.id)
           .single();
 
-        if (profile) {
+        if (profile && mounted) {
           const userProfile: UserProfile = {
             name: profile.name,
             email: profile.email,
@@ -120,13 +123,16 @@ const App: React.FC = () => {
           localStorage.setItem('iitgn_user_profile', JSON.stringify(userProfile));
         }
       } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setChecklist([]);
-        localStorage.removeItem('iitgn_user_profile');
+        if (mounted) {
+          setUser(null);
+          setChecklist([]);
+          localStorage.removeItem('iitgn_user_profile');
+        }
       }
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);

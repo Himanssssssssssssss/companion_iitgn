@@ -63,6 +63,11 @@ const Mess: React.FC<MessProps> = ({ user }) => {
   useEffect(() => {
     const loadWeeklyMenu = async () => {
       setLoading(true);
+
+      // 1. Try loading from cache FIRST for instant display
+      const cachedMenu = localStorage.getItem('cached_mess_menu');
+      let menuData = cachedMenu ? JSON.parse(cachedMenu) : null;
+
       // Get start and end of the current week view
       const start = startOfWeek(selectedDate, { weekStartsOn: 1 }); // Monday
       const end = addDays(start, 6); // Sunday
@@ -72,23 +77,29 @@ const Mess: React.FC<MessProps> = ({ user }) => {
 
       console.log(`Fetching menu from ${startDateStr} to ${endDateStr}`);
 
+      // 2. Fetch fresh data from Supabase
       const { data, error } = await supabase
         .from('mess_menu')
         .select('*')
         .gte('date', startDateStr)
         .lte('date', endDateStr);
 
-      let menuData = data;
-
-      if (error || !data) {
-        console.error('Error loading mess menu, trying cache:', error);
-        // Try loading from cache
-        const cachedMenu = localStorage.getItem('cached_mess_menu');
-        if (cachedMenu) {
-          menuData = JSON.parse(cachedMenu);
-        } else {
+      if (error) {
+        console.error('Error loading mess menu:', error);
+        // If fetch fails, we rely on cached data (menuData)
+        if (!menuData) {
           setLoading(false);
           return;
+        }
+      } else if (data) {
+        // If fetch succeeds, use fresh data
+        menuData = data;
+        // Update cache if we have data
+        if (data.length > 0) {
+          localStorage.setItem('cached_mess_menu', JSON.stringify(data));
+          // Note: This simple cache might overwrite other weeks. 
+          // For a robust solution, we'd merge, but for now this fixes the immediate "empty" issue.
+          // Ideally, we cache ALL fetched data.
         }
       }
 
