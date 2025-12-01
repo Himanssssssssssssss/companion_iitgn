@@ -122,27 +122,13 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
     const handleSaveEditedImage = async (editedImageDataUrl: string) => {
         setUploading(true);
         try {
-            // Convert data URL to blob then to file for compression
-            const response = await fetch(editedImageDataUrl);
-            const blob = await response.blob();
-            const file = new File([blob], 'id-card.jpg', { type: 'image/jpeg' });
-
-            // Compress image
-            const compressedFile = await compressImage(file, 200);
-
-            // Convert to Base64 for Local Storage
-            const finalReader = new FileReader();
-            finalReader.onloadend = () => {
-                const base64String = finalReader.result as string;
-                localStorage.setItem('local_id_card', base64String);
-                onUpdateUser({ ...user, photoUrl: base64String });
-                setShowImageEditor(false);
-                setTempImage(null);
-                alert('ID card saved locally!');
-                setUploading(false);
-            };
-            finalReader.readAsDataURL(compressedFile);
-
+            // Save directly without compression
+            localStorage.setItem('local_id_card', editedImageDataUrl);
+            onUpdateUser({ ...user, photoUrl: editedImageDataUrl });
+            setShowImageEditor(false);
+            setTempImage(null);
+            alert('ID card saved locally!');
+            setUploading(false);
         } catch (error) {
             console.error('Upload error:', error);
             alert('Error saving ID card');

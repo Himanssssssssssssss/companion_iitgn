@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { RotateCw, Check, X, Move } from 'lucide-react';
+import { RotateCw, Check, X, ZoomIn, ZoomOut } from 'lucide-react';
 
 interface ImageEditorProps {
     imageSrc: string;
@@ -7,42 +7,33 @@ interface ImageEditorProps {
     onCancel: () => void;
 }
 
-interface Corner {
-    x: number;
-    y: number;
-}
-
 const ImageEditor: React.FC<ImageEditorProps> = ({ imageSrc, onSave, onCancel }) => {
     const [rotation, setRotation] = useState(0);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const previewCanvasRef = useRef<HTMLCanvasElement>(null);
-    const imgRef = useRef<HTMLImageElement>(null);
+    const [scale, setScale] = useState(1);
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
     const containerRef = useRef<HTMLDivElement>(null);
-
-    // Corner points for perspective crop (normalized 0-1)
-    const [corners, setCorners] = useState<Corner[]>([
-        { x: 0.1, y: 0.1 },   // Top-left
-        { x: 0.9, y: 0.1 },   // Top-right
-        { x: 0.9, y: 0.9 },   // Bottom-right
-        { x: 0.1, y: 0.9 },   // Bottom-left
-    ]);
-
-    const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const outputCanvasRef = useRef<HTMLCanvasElement>(null);
+    const imgRef = useRef<HTMLImageElement | null>(null);
 
     useEffect(() => {
         const img = new Image();
-        img.src = imageSrc;
+        img.crossOrigin = 'anonymous';
         img.onload = () => {
             imgRef.current = img;
-            drawPreview();
+            drawCanvas();
         };
+        img.src = imageSrc;
     }, [imageSrc]);
 
     useEffect(() => {
-        drawPreview();
-    }, [rotation, corners]);
+        drawCanvas();
+    }, [rotation, scale, position]);
 
-    const drawPreview = () => {
+    const drawCanvas = () => {
         if (!canvasRef.current || !imgRef.current) return;
 
         const canvas = canvasRef.current;
@@ -51,127 +42,131 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageSrc, onSave, onCancel })
 
         const img = imgRef.current;
 
-        // Set canvas size based on image
-        canvas.width = Math.min(img.width, 800);
-        canvas.height = (canvas.width / img.width) * img.height;
+        // Set canvas size
+        const maxWidth = 800;
+        const maxHeight = 600;
+        const aspectRatio = img.width / img.height;
+
+        let canvasWidth = maxWidth;
+        let canvasHeight = maxWidth / aspectRatio;
+
+        if (canvasHeight > maxHeight) {
+            canvasHeight = maxHeight;
+            canvasWidth = maxHeight * aspectRatio;
+        }
+
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
 
         // Clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Rotate if needed
-        if (rotation !== 0) {
-            ctx.save();
-            ctx.translate(canvas.width / 2, canvas.height / 2);
-            ctx.rotate((rotation * Math.PI) / 180);
-            ctx.drawImage(img, -canvas.width / 2, -canvas.height / 2, canvas.width, canvas.height);
-            ctx.restore();
-        } else {
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        }
+        // Save context
+        ctx.save();
 
-        // Draw corner points and lines
+        // Translate to center
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+
+        // Apply rotation
+        ctx.rotate((rotation * Math.PI) / 180);
+
+        // Apply scale and position
+        ctx.translate(position.x, position.y);
+        ctx.scale(scale, scale);
+
+        // Draw image centered
+        ctx.drawImage(img, -img.width / 2, -img.height / 2, img.width, img.height);
+
+        // Restore context
+        ctx.restore();
+
+        // Draw crop overlay (centered rectangle)
         ctx.strokeStyle = '#3B82F6';
+        ctx.lineWidth = 3;
+        const cropWidth = canvas.width * 0.8;
+        const cropHeight = canvas.height * 0.8;
+        const cropX = (canvas.width - cropWidth) / 2;
+        const cropY = (canvas.height - cropHeight) / 2;
+        ctx.strokeRect(cropX, cropY, cropWidth, cropHeight);
+
+        // Draw corner handles
+        const handleSize = 20;
+        const corners = [
+            [cropX, cropY],
+            [cropX + cropWidth, cropY],
+            [cropX + cropWidth, cropY + cropHeight],
+            [cropX, cropY + cropHeight]
+        ];
+
         ctx.fillStyle = '#3B82F6';
-        ctx.lineWidth = 2;
-
-        // Draw lines connecting corners
-        ctx.beginPath();
-        corners.forEach((corner, index) => {
-            const x = corner.x * canvas.width;
-            const y = corner.y * canvas.height;
-            if (index === 0) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
-            }
-        });
-        ctx.closePath();
-        ctx.stroke();
-
-        // Draw corner circles
-        corners.forEach(corner => {
-            const x = corner.x * canvas.width;
-            const y = corner.y * canvas.height;
-            ctx.beginPath();
-            ctx.arc(x, y, 8, 0, Math.PI * 2);
-            ctx.fill();
+        corners.forEach(([x, y]) => {
+            ctx.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
         });
     };
 
-    const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-        if (!canvasRef.current) return;
-
-        const rect = canvasRef.current.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / rect.width;
-        const y = (e.clientY - rect.top) / rect.height;
-
-        // Find which corner is being clicked
-        const clickRadius = 15 / rect.width; // 15px click radius
-        const cornerIndex = corners.findIndex(corner =>
-            Math.hypot(corner.x - x, corner.y - y) < clickRadius
-        );
-
-        if (cornerIndex !== -1) {
-            setDraggingIndex(cornerIndex);
-        }
+    const handleMouseDown = (e: React.MouseEvent) => {
+        setIsDragging(true);
+        setDragStart({
+            x: e.clientX - position.x,
+            y: e.clientY - position.y
+        });
     };
 
-    const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-        if (draggingIndex === null || !canvasRef.current) return;
+    const handleMouseMove = (e: React.MouseEvent) => {
+        if (!isDragging) return;
 
-        const rect = canvasRef.current.getBoundingClientRect();
-        const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-
-        const newCorners = [...corners];
-        newCorners[draggingIndex] = { x, y };
-        setCorners(newCorners);
+        setPosition({
+            x: e.clientX - dragStart.x,
+            y: e.clientY - dragStart.y
+        });
     };
 
     const handleMouseUp = () => {
-        setDraggingIndex(null);
+        setIsDragging(false);
     };
 
     const handleSave = () => {
-        if (!canvasRef.current || !previewCanvasRef.current || !imgRef.current) return;
+        if (!canvasRef.current || !outputCanvasRef.current || !imgRef.current) return;
 
-        const outputCanvas = previewCanvasRef.current;
+        const outputCanvas = outputCanvasRef.current;
         const ctx = outputCanvas.getContext('2d');
         if (!ctx) return;
 
-        // Set output size
-        const outputWidth = 800;
-        const outputHeight = 500;
+        const img = imgRef.current;
+
+        // Output at original image resolution (no quality loss)
+        const outputWidth = img.width;
+        const outputHeight = img.height;
         outputCanvas.width = outputWidth;
         outputCanvas.height = outputHeight;
 
-        const img = imgRef.current;
-        const srcCanvas = canvasRef.current;
+        // Clear
+        ctx.clearRect(0, 0, outputWidth, outputHeight);
 
-        // Convert normalized corners to actual pixel coordinates
-        const srcCorners = corners.map(c => ({
-            x: c.x * srcCanvas.width,
-            y: c.y * srcCanvas.height
-        }));
+        // Save context
+        ctx.save();
 
-        // Apply perspective transform (simplified - using canvas drawImage with perspective)
-        // For a full perspective transform, we'd need a more advanced library
-        // This is a simplified crop to the bounding box
-        const minX = Math.min(...srcCorners.map(c => c.x));
-        const maxX = Math.max(...srcCorners.map(c => c.x));
-        const minY = Math.min(...srcCorners.map(c => c.y));
-        const maxY = Math.max(...srcCorners.map(c => c.y));
+        // Translate to center
+        ctx.translate(outputWidth / 2, outputHeight / 2);
 
-        const cropWidth = maxX - minX;
-        const cropHeight = maxY - minY;
+        // Apply rotation
+        ctx.rotate((rotation * Math.PI) / 180);
 
-        ctx.drawImage(
-            srcCanvas,
-            minX, minY, cropWidth, cropHeight,
-            0, 0, outputWidth, outputHeight
-        );
+        // Apply scale and normalized position
+        const normalizedX = position.x * (outputWidth / (canvasRef.current?.width || 1));
+        const normalizedY = position.y * (outputHeight / (canvasRef.current?.height || 1));
+        ctx.translate(normalizedX, normalizedY);
+        ctx.scale(scale, scale);
 
-        const editedImage = outputCanvas.toDataURL('image/jpeg', 0.9);
+        // Draw image at full resolution
+        ctx.drawImage(img, -img.width / 2, -img.height / 2, img.width, img.height);
+
+        // Restore
+        ctx.restore();
+
+        // Save as PNG (lossless) or high-quality JPEG
+        const editedImage = outputCanvas.toDataURL('image/png'); // PNG for no compression
         onSave(editedImage);
     };
 
@@ -179,61 +174,114 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageSrc, onSave, onCancel })
         setRotation((prev) => (prev + 90) % 360);
     };
 
-    return (
-        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-4">
-            <div className="bg-slate-800 rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-                <h3 className="text-lg font-bold text-white mb-4">Edit ID Card</h3>
+    const zoomIn = () => {
+        setScale((prev) => Math.min(prev + 0.1, 3));
+    };
 
-                {/* Canvas with corner dragging */}
-                <div ref={containerRef} className="bg-slate-900 rounded-xl overflow-hidden mb-4 flex items-center justify-center relative">
+    const zoomOut = () => {
+        setScale((prev) => Math.max(prev - 0.1, 0.5));
+    };
+
+    const resetView = () => {
+        setRotation(0);
+        setScale(1);
+        setPosition({ x: 0, y: 0 });
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-4">
+            <div className="bg-slate-800 rounded-2xl p-6 max-w-5xl w-full max-h-[95vh] overflow-y-auto">
+                <h3 className="text-xl font-bold text-white mb-4">Crop & Adjust ID Card</h3>
+
+                {/* Canvas Container */}
+                <div
+                    ref={containerRef}
+                    className="bg-slate-900 rounded-xl overflow-hidden mb-4 flex items-center justify-center relative cursor-move"
+                    style={{ minHeight: '500px' }}
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                >
                     <canvas
                         ref={canvasRef}
-                        onMouseDown={handleMouseDown}
-                        onMouseMove={handleMouseMove}
-                        onMouseUp={handleMouseUp}
-                        onMouseLeave={handleMouseUp}
-                        className="max-w-full max-h-[500px] cursor-crosshair"
+                        className="max-w-full max-h-[600px]"
                     />
                 </div>
 
-                <p className="text-xs text-gray-400 mb-4 flex items-center">
-                    <Move size={14} className="mr-1" />
-                    Drag the blue corners to adjust the crop area
+                <p className="text-sm text-gray-400 mb-6">
+                    💡 <strong>Drag</strong> to move • <strong>Zoom</strong> to adjust size • <strong>Rotate</strong> as needed
                 </p>
 
-                {/* Hidden canvas for final output */}
-                <canvas ref={previewCanvasRef} className="hidden" />
+                {/* Hidden output canvas */}
+                <canvas ref={outputCanvasRef} className="hidden" />
 
                 {/* Controls */}
-                <div className="space-y-4">
-                    {/* Rotation */}
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-300">Rotate</span>
-                        <button
-                            onClick={rotate}
-                            className="flex items-center space-x-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"
-                        >
-                            <RotateCw size={16} />
-                            <span>90°</span>
-                        </button>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                    <button
+                        onClick={rotate}
+                        className="flex items-center justify-center space-x-2 bg-slate-700 text-white px-4 py-3 rounded-lg hover:bg-slate-600 transition"
+                    >
+                        <RotateCw size={18} />
+                        <span>Rotate</span>
+                    </button>
+
+                    <button
+                        onClick={zoomIn}
+                        className="flex items-center justify-center space-x-2 bg-slate-700 text-white px-4 py-3 rounded-lg hover:bg-slate-600 transition"
+                    >
+                        <ZoomIn size={18} />
+                        <span>Zoom In</span>
+                    </button>
+
+                    <button
+                        onClick={zoomOut}
+                        className="flex items-center justify-center space-x-2 bg-slate-700 text-white px-4 py-3 rounded-lg hover:bg-slate-600 transition"
+                    >
+                        <ZoomOut size={18} />
+                        <span>Zoom Out</span>
+                    </button>
+
+                    <button
+                        onClick={resetView}
+                        className="flex items-center justify-center space-x-2 bg-slate-700 text-white px-4 py-3 rounded-lg hover:bg-slate-600 transition"
+                    >
+                        <span>Reset</span>
+                    </button>
+                </div>
+
+                {/* Scale Display */}
+                <div className="mb-6">
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-gray-400">Zoom Level</span>
+                        <span className="text-sm text-primary-400 font-mono">{Math.round(scale * 100)}%</span>
                     </div>
+                    <input
+                        type="range"
+                        min="0.5"
+                        max="3"
+                        step="0.1"
+                        value={scale}
+                        onChange={(e) => setScale(parseFloat(e.target.value))}
+                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                    />
                 </div>
 
                 {/* Actions */}
-                <div className="flex space-x-3 mt-6">
+                <div className="flex space-x-3">
                     <button
                         onClick={onCancel}
-                        className="flex-1 flex items-center justify-center space-x-2 bg-slate-700 text-white px-4 py-3 rounded-lg hover:bg-slate-600"
+                        className="flex-1 flex items-center justify-center space-x-2 bg-slate-700 text-white px-6 py-4 rounded-lg hover:bg-slate-600 transition font-semibold"
                     >
-                        <X size={18} />
+                        <X size={20} />
                         <span>Cancel</span>
                     </button>
                     <button
                         onClick={handleSave}
-                        className="flex-1 flex items-center justify-center space-x-2 bg-primary-600 text-white px-4 py-3 rounded-lg hover:bg-primary-700"
+                        className="flex-1 flex items-center justify-center space-x-2 bg-primary-600 text-white px-6 py-4 rounded-lg hover:bg-primary-700 transition font-semibold"
                     >
-                        <Check size={18} />
-                        <span>Save Crop</span>
+                        <Check size={20} />
+                        <span>Save (No Compression)</span>
                     </button>
                 </div>
             </div>
