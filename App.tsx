@@ -192,12 +192,6 @@ const App: React.FC = () => {
     setActiveTab(Tab.HOME);
   };
 
-  const handleLogin = useCallback((loggedInUser: UserProfile) => {
-    console.log('[App] handleLogin called with:', loggedInUser);
-    setUser(loggedInUser);
-    localStorage.setItem('iitgn_user_profile', JSON.stringify(loggedInUser));
-  }, [setUser]);
-
   const renderContent = () => {
     switch (activeTab) {
       case Tab.HOME:
@@ -231,7 +225,7 @@ const App: React.FC = () => {
 
       {!loading && (
         !_user ? (
-          <Login onLogin={handleLogin} />
+          <Login onLogin={() => { }} />
         ) : (
           <Layout activeTab={activeTab} onTabChange={setActiveTab}>
             {renderContent()}

@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { User, Mail, Lock, ArrowRight, Loader2, AlertCircle, School } from 'lucide-react';
 
 interface LoginProps {
-  onLogin?: (user: UserProfile) => void;
+  onLogin: (user: UserProfile) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
@@ -68,77 +68,52 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           photoUrl: undefined
         };
 
-        onLogin?.(user);
+        onLogin(user);
       } else {
         // Sign in
-        console.log('[PWA DEBUG] Starting signin flow');
-        console.log('[PWA DEBUG] Email:', email);
+        console.log('Attempting signin...');
 
         const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password
         });
 
-        console.log('[PWA DEBUG] Auth response:', {
-          hasData: !!authData,
-          hasUser: !!authData?.user,
-          hasSession: !!authData?.session,
-          error: signInError?.message
-        });
-
         if (signInError) {
-          console.error('[PWA DEBUG] Signin error:', signInError);
+          console.error('Signin error:', signInError);
           setError(signInError.message);
           setLoading(false);
           return;
         }
 
         if (!authData.user) {
-          console.error('[PWA DEBUG] No user in auth response');
           setError('Login failed. Please try again.');
           setLoading(false);
           return;
         }
 
-        console.log('[PWA DEBUG] Auth successful! User ID:', authData.user.id);
+        console.log('Signin successful! Fetching profile...');
 
-        // Try to get profile but don't let it block login
-        let profile = null;
-        try {
-          console.log('[PWA DEBUG] Attempting to fetch profile...');
-          const { data, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', authData.user.id)
-            .single();
+        // Try to fetch profile, but don't block login if it fails
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authData.user.id)
+          .single();
 
-          if (profileError) {
-            console.warn('[PWA DEBUG] Profile fetch error:', profileError.message);
-          } else {
-            console.log('[PWA DEBUG] Profile fetched successfully');
-            profile = data;
-          }
-        } catch (err) {
-          console.error('[PWA DEBUG] Profile fetch exception:', err);
+        if (profileError) {
+          console.warn('Profile fetch warning:', profileError);
         }
 
-        // ALWAYS construct user and call onLogin
+        // Construct user object - Fallback to auth data if profile missing
         const user: UserProfile = {
-          name: profile?.name || authData.user.user_metadata?.name || authData.user.email?.split('@')[0] || 'Student',
+          name: profile?.name || authData.user.user_metadata?.name || 'Student',
           email: profile?.email || authData.user.email || email,
           id: profile?.student_id || authData.user.user_metadata?.student_id || '000000',
           photoUrl: profile?.id_card_url
         };
 
-        console.log('[PWA DEBUG] Calling onLogin with user:', user);
-        setLoading(false);
-
-        // Call onLogin - this should update the app UI
-        if (onLogin) {
-          onLogin(user);
-        } else {
-          console.error('[PWA DEBUG] ERROR: onLogin is undefined!');
-        }
+        console.log('Login complete. Updating app state...', user);
+        onLogin(user);
       }
     } catch (err: any) {
       console.error('Login error:', err);
