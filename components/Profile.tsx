@@ -5,6 +5,7 @@ import { supabase, updateProfileImages } from '../lib/supabase';
 import { QRCodeSVG } from 'qrcode.react';
 import imageCompression from 'browser-image-compression';
 import jsQR from 'jsqr';
+import ImageEditor from './ImageEditor';
 
 interface ProfileProps {
     user: UserProfile;
@@ -26,6 +27,9 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
 
     const idImageInputRef = useRef<HTMLInputElement>(null);
     const qrImageInputRef = useRef<HTMLInputElement>(null);
+
+    const [showImageEditor, setShowImageEditor] = useState(false);
+    const [tempImage, setTempImage] = useState<string | null>(null);
 
     // Load ID card from local storage on mount
     useEffect(() => {
@@ -106,27 +110,49 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
         const file = e.target.files?.[0];
         if (!file) return;
 
+        // Read file as data URL for preview/editing
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setTempImage(reader.result as string);
+            setShowImageEditor(true);
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleSaveEditedImage = async (editedImageDataUrl: string) => {
         setUploading(true);
         try {
+            // Convert data URL to blob then to file for compression
+            const response = await fetch(editedImageDataUrl);
+            const blob = await response.blob();
+            const file = new File([blob], 'id-card.jpg', { type: 'image/jpeg' });
+
             // Compress image
             const compressedFile = await compressImage(file, 200);
 
             // Convert to Base64 for Local Storage
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64String = reader.result as string;
+            const finalReader = new FileReader();
+            finalReader.onloadend = () => {
+                const base64String = finalReader.result as string;
                 localStorage.setItem('local_id_card', base64String);
                 onUpdateUser({ ...user, photoUrl: base64String });
+                setShowImageEditor(false);
+                setTempImage(null);
                 alert('ID card saved locally!');
                 setUploading(false);
             };
-            reader.readAsDataURL(compressedFile);
+            finalReader.readAsDataURL(compressedFile);
 
         } catch (error) {
             console.error('Upload error:', error);
             alert('Error saving ID card');
             setUploading(false);
         }
+    };
+
+    const handleCancelEdit = () => {
+        setShowImageEditor(false);
+        setTempImage(null);
     };
 
     const handleDeleteIdCard = () => {
@@ -224,14 +250,71 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
 
     return (
         <div className="space-y-6 pb-24">
-            {/* Header */}
-            <div className="flex items-center space-x-4 mb-4">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center text-2xl font-bold text-white shadow-lg">
-                    {user.name.charAt(0)}
-                </div>
-                <div>
-                    <h1 className="text-xl font-bold text-white">{user.name}</h1>
-                    <p className="text-gray-400 text-sm">{user.id}</p>
+            {/* Image Editor Modal */}
+            {showImageEditor && tempImage && (
+                <ImageEditor
+                    imageSrc={tempImage}
+                    onSave={handleSaveEditedImage}
+                    onCancel={handleCancelEdit}
+                />
+            )}
+
+            {/* Profile Card with Edit */}
+            <div className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-primary-600 to-purple-600 opacity-20"></div>
+
+                <div className="relative z-10 flex flex-col items-center">
+                    <div className="w-24 h-24 rounded-full bg-slate-700 border-4 border-slate-800 mb-4 flex items-center justify-center overflow-hidden shadow-xl">
+                        {user.photoUrl ? (
+                            <img src={user.photoUrl} alt="Profile" className="w-full h-full object-cover" />
+                        ) : (
+                            <span className="text-3xl font-bold text-slate-400">{user.name.charAt(0)}</span>
+                        )}
+                    </div>
+
+                    {isEditing ? (
+                        <div className="w-full space-y-3 mb-4">
+                            <input
+                                type="text"
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg px-3 py-2 text-white text-center"
+                                placeholder="Full Name"
+                            />
+                            <input
+                                type="text"
+                                value={editId}
+                                onChange={(e) => setEditId(e.target.value)}
+                                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg px-3 py-2 text-white text-center"
+                                placeholder="Roll Number"
+                            />
+                            <div className="flex space-x-2 justify-center">
+                                <button
+                                    onClick={() => setIsEditing(false)}
+                                    className="px-4 py-1.5 bg-slate-700 rounded-lg text-sm"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSaveProfile}
+                                    className="px-4 py-1.5 bg-primary-600 text-white rounded-lg text-sm"
+                                >
+                                    Save
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <h2 className="text-xl font-bold text-white">{user.name}</h2>
+                            <p className="text-slate-400 text-sm mb-4">{user.id}</p>
+                            <button
+                                onClick={() => setIsEditing(true)}
+                                className="text-xs text-primary-400 hover:text-primary-300 underline mb-4"
+                            >
+                                Edit Profile
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -254,7 +337,17 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
                     <div className="space-y-4">
                         {/* ID Card Upload */}
                         <div className="glass p-4 rounded-2xl">
-                            <h3 className="text-sm font-bold text-white mb-3">Physical ID Card</h3>
+                            <div className="flex justify-between items-center mb-3">
+                                <h3 className="text-sm font-bold text-white">Physical ID Card</h3>
+                                {user.photoUrl && (
+                                    <button
+                                        onClick={handleDeleteIdCard}
+                                        className="text-xs text-red-400 hover:text-red-300"
+                                    >
+                                        Delete
+                                    </button>
+                                )}
+                            </div>
                             <div className="border border-white/10 rounded-2xl aspect-[1.586/1] relative group overflow-hidden flex items-center justify-center bg-black/40">
                                 {user.photoUrl ? (
                                     <img src={user.photoUrl} alt="ID Card" className="w-full h-full object-cover rounded-xl" />
@@ -281,7 +374,17 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
 
                         {/* QR Code Upload */}
                         <div className="glass p-4 rounded-2xl">
-                            <h3 className="text-sm font-bold text-white mb-3">Mess QR Code</h3>
+                            <div className="flex justify-between items-center mb-3">
+                                <h3 className="text-sm font-bold text-white">Mess QR Code</h3>
+                                {qrCodeData && (
+                                    <button
+                                        onClick={handleDeleteQRCode}
+                                        className="text-xs text-red-400 hover:text-red-300"
+                                    >
+                                        Delete
+                                    </button>
+                                )}
+                            </div>
                             <div className="border border-white/10 rounded-2xl aspect-square relative group overflow-hidden flex items-center justify-center bg-white p-4">
                                 {qrCodeData ? (
                                     <QRCodeSVG value={qrCodeData} size={200} level="H" />
@@ -315,7 +418,7 @@ const Profile: React.FC<ProfileProps> = ({ user, settings, onUpdateUser, onUpdat
                                 {settings.showIdOnHome ? <Eye size={20} /> : <EyeOff size={20} />}
                             </button>
                         </div>
-                        <p className="text-xs text-gray-500 text-center">ID compressed to \u003c200KB. QR data extracted and saved.</p>
+                        <p className="text-xs text-gray-500 text-center">📌 ID Card stored locally on your device. QR data saved to database.</p>
                     </div>
                 )}
 
