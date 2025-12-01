@@ -114,16 +114,6 @@ const App: React.FC = () => {
       }
     };
 
-    // Part 3: Loading Safety Net (10 seconds)
-    const safetyTimeout = setTimeout(() => {
-      if (mounted && loading) {
-        console.error('[Session] Hung for 10s, forcing reload');
-        alert('Session timeout detected. Refreshing...');
-        localStorage.clear();
-        window.location.reload();
-      }
-    }, 10000);
-
     initializeSession();
 
     // Set up auth listener AFTER initial check
@@ -164,7 +154,6 @@ const App: React.FC = () => {
 
     return () => {
       mounted = false;
-      clearTimeout(safetyTimeout);
       authSubscription?.unsubscribe();
     };
   }, []);
