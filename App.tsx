@@ -27,6 +27,11 @@ const App: React.FC = () => {
   // Load user session from Supabase on mount
   useEffect(() => {
     const loadSession = async () => {
+      // Set a timeout to prevent infinite loading (fixes blank screen issue)
+      const loadingTimeout = setTimeout(() => {
+        setLoading(false);
+      }, 3000); // 3 seconds max loading time
+
       try {
         // 1. Try to load from localStorage first (fastest & offline support)
         const cachedUser = localStorage.getItem('iitgn_user_profile');
@@ -55,6 +60,19 @@ const App: React.FC = () => {
             setUser(userProfile);
             // Update cache
             localStorage.setItem('iitgn_user_profile', JSON.stringify(userProfile));
+
+            // --- OFFLINE DATA SYNC ---
+            // Cache Mess Menu
+            const { data: messData } = await supabase.from('mess_menu').select('*');
+            if (messData) {
+              localStorage.setItem('cached_mess_menu', JSON.stringify(messData));
+            }
+
+            // Cache Bus Schedule
+            const { data: busData } = await supabase.from('bus_schedules').select('*');
+            if (busData) {
+              localStorage.setItem('cached_bus_schedules', JSON.stringify(busData));
+            }
           }
         } else if (!cachedUser) {
           // No session and no cache
@@ -75,6 +93,7 @@ const App: React.FC = () => {
       } catch (error) {
         console.error('Error loading session:', error);
       } finally {
+        clearTimeout(loadingTimeout);
         setLoading(false);
       }
     };

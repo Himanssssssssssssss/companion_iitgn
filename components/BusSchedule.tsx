@@ -10,6 +10,7 @@ interface Bus {
   display_time: string;
   bus_type: string;
   route_type: string;
+  status?: string;
 }
 
 const BusSchedule: React.FC = () => {
@@ -21,6 +22,7 @@ const BusSchedule: React.FC = () => {
 
   useEffect(() => {
     const fetchBuses = async () => {
+      setLoading(true); // Ensure loading is true when starting fetch
       try {
         const { data, error } = await supabase
           .from('bus_schedules')
@@ -30,12 +32,21 @@ const BusSchedule: React.FC = () => {
           .order('departure_time', { ascending: true });
 
         if (error) {
-          console.error('Error fetching buses:', error);
-          setLoading(false);
-          return;
+          console.error('Error fetching buses, trying cache:', error);
+          // Try loading from cache
+          const cachedBuses = localStorage.getItem('cached_bus_schedules');
+          if (cachedBuses) {
+            const allBuses: Bus[] = JSON.parse(cachedBuses);
+            // Filter locally since we have all buses in cache
+            setBuses(allBuses.filter((b: Bus) => b.route_type === routeType && b.status === 'active').sort((a, b) => a.departure_time.localeCompare(b.departure_time)));
+          } else {
+            setBuses([]); // No cache, no data
+          }
+        } else if (data) {
+          setBuses(data || []);
+          // Cache the fetched data
+          localStorage.setItem('cached_bus_schedules', JSON.stringify(data));
         }
-
-        setBuses(data || []);
       } catch (e) {
         console.error("Failed to load buses", e);
       } finally {

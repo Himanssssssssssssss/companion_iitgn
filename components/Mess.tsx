@@ -78,10 +78,18 @@ const Mess: React.FC<MessProps> = ({ user }) => {
         .gte('date', startDateStr)
         .lte('date', endDateStr);
 
-      if (error) {
-        console.error('Error loading mess menu:', error);
-        setLoading(false);
-        return;
+      let menuData = data;
+
+      if (error || !data) {
+        console.error('Error loading mess menu, trying cache:', error);
+        // Try loading from cache
+        const cachedMenu = localStorage.getItem('cached_mess_menu');
+        if (cachedMenu) {
+          menuData = JSON.parse(cachedMenu);
+        } else {
+          setLoading(false);
+          return;
+        }
       }
 
       const newWeeklyMenu: Record<string, DailyMenu> = {};
@@ -192,8 +200,8 @@ const Mess: React.FC<MessProps> = ({ user }) => {
             key={meal.name}
             onClick={() => setActiveMealIndex(index)}
             className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl whitespace-nowrap transition-all duration-300 ${activeMealIndex === index
-                ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/25 scale-105'
-                : 'bg-slate-800/50 text-gray-400 hover:bg-slate-800 hover:text-gray-200'
+              ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/25 scale-105'
+              : 'bg-slate-800/50 text-gray-400 hover:bg-slate-800 hover:text-gray-200'
               }`}
           >
             {meal.icon}
